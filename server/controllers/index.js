@@ -4,6 +4,9 @@ const models = require('../models');
 // get the Cat model
 const Cat = models.Cat.CatModel;
 
+// Get the Dog model
+const Dog = models.Dog.DogModel;
+
 // default fake data so that we have something to work with until we make a real Cat
 const defaultData = {
   name: 'unknown',
@@ -70,6 +73,12 @@ const readCat = (req, res) => {
   Cat.findByName(name1, callback);
 };
 
+// Get and return a list of all dogs
+const getDogs = (req, res, callback) => {
+  // Find all dogs
+  Dog.find(callback).lean();
+};
+
 // function to handle requests to the page1 page
 // controller functions in Express receive the full HTTP request
 // and a pre-filled out response object to send
@@ -105,13 +114,28 @@ const hostPage2 = (req, res) => {
 // controller functions in Express receive the full HTTP request
 // and a pre-filled out response object to send
 const hostPage3 = (req, res) => {
-    // res.render takes a name of a page to render.
-    // These must be in the folder you specified as views in your main app.js file
-    // Additionally, you don't need .jade because you registered the file type
-    // in the app.js as jade. Calling res.render('index')
-    // actually calls index.jade. A second parameter of JSON can be passed
-    // into the jade to be used as variables with #{varName}
+  // res.render takes a name of a page to render.
+  // These must be in the folder you specified as views in your main app.js file
+  // Additionally, you don't need .jade because you registered the file type
+  // in the app.js as jade. Calling res.render('index')
+  // actually calls index.jade. A second parameter of JSON can be passed
+  // into the jade to be used as variables with #{varName}
   res.render('page3');
+};
+
+// Handle requests to /page4
+const hostPage4 = (req, res) => {
+  // Callback to use for db query
+  const callback = (err, docs) => {
+    if (err) {
+      // Return internal errors
+      return res.status(500).json({ err });
+    }
+
+    return res.render('page4', { dogs: docs });
+  };
+
+  getDogs(req, res, callback);
 };
 
 // function to handle get request to send the name
@@ -249,16 +273,104 @@ const notFound = (req, res) => {
   });
 };
 
+// body/form/POST data in the request as req.body
+const addDog = (req, res) => {
+  // Check required fields
+  if (!req.body.name || !req.body.breed || !req.body.age) {
+    return res.status(400).json({ error: 'name, breed, and age are all required' });
+  }
+
+  return Dog.findByName(req.body.name, (err, doc) => {
+    // Return internal errors
+    if (err) {
+      return res.status(500).json({ err });
+    }
+
+    // Inform if the dog already exists
+    if (doc) {
+      return res.json({ error: 'Dog already exists' });
+    }
+
+    // Data filtered out from the request
+    const dogData = {
+      name: req.body.name,
+      breed: req.body.breed,
+      age: req.body.age,
+    };
+
+    // Save the new dog into the db
+    const newDog = new Dog(dogData);
+    const savePromise = newDog.save();
+
+    // Return success
+    savePromise.then(() => {
+      res.json({ name: dogData.name, breed: dogData.breed, age: dogData.age });
+    });
+
+    // Return any
+    savePromise.catch((err2) => res.status(500).json({ err2 }));
+
+    return res;
+  });
+};
+
+const pollDog = (req, res) => {
+  let foundDog = null;
+  // Require a name
+  if (!req.body.name) {
+    return res.status(400).json({ error: 'Name is required to poll' });
+  }
+
+  return Dog.findByName(req.body.name, (err, doc) => {
+    // Return internal errors
+    if (err) {
+      return res.status(500).json({ err });
+    }
+
+    // Inform if there are no dogs
+    if (!doc) {
+      return res.json({ error: 'No dogs found' });
+    }
+
+    foundDog = doc;
+    foundDog.age++;
+
+    // If there's a match, send it up
+    const dogData = {
+      name: doc.name,
+      breed: doc.breed,
+      age: doc.age,
+    };
+
+    const savePromise = foundDog.save();
+
+    // Send back the data as success
+    savePromise.then(() => res.json({
+      name: dogData.name,
+      breed: dogData.breed,
+      age: dogData.age,
+    }));
+
+    // Return any errors
+    savePromise.catch((err2) => res.status(500).json({ err2 }));
+    return res;
+  });
+};
+
 // export the relevant public controller functions
 module.exports = {
   index: hostIndex,
   page1: hostPage1,
   page2: hostPage2,
   page3: hostPage3,
+  page4: hostPage4,
   readCat,
   getName,
   setName,
   updateLast,
   searchName,
   notFound,
+  addDog,
+  pollDog,
+  getDogs,
 };
